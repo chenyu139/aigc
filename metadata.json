@@ -1,0 +1,5 @@
+{
+  "name": "Nebula Geometry",
+  "description": "A high-performance 3D particle system visualizing mathematical chaos and beauty using Three.js and React.",
+  "requestFramePermissions": []
+}
