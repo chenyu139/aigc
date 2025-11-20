@@ -1,4 +1,4 @@
-import React, { useRef, useMemo, useEffect } from 'react';
+import React, { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { getShapePositions, PARTICLE_COUNT } from '../utils/mathGenerators';
@@ -11,66 +11,75 @@ interface ParticleSystemProps {
 const ParticleSystem: React.FC<ParticleSystemProps> = ({ shape }) => {
   const pointsRef = useRef<THREE.Points>(null);
   
-  // Buffers
-  // currentPosition is the live buffer attribute displayed
-  // targetPosition is where we want to go
   const currentPositions = useMemo(() => new Float32Array(PARTICLE_COUNT * 3), []);
   const targetPositions = useMemo(() => getShapePositions(shape), [shape]);
   
-  // Initialize current positions to target (instant first load)
   useMemo(() => {
     if (currentPositions[0] === 0 && currentPositions[1] === 0) {
         currentPositions.set(targetPositions);
     }
   }, [currentPositions, targetPositions]);
 
-  // Helper for colors based on shape
-  const colorAttribute = useMemo(() => {
-    const colors = new Float32Array(PARTICLE_COUNT * 3);
-    const color1 = new THREE.Color('#00ffff'); // Cyan
-    const color2 = new THREE.Color('#ff00ff'); // Magenta
-    
-    for (let i = 0; i < PARTICLE_COUNT; i++) {
-      const mixed = color1.clone().lerp(color2, Math.random());
-      colors[i * 3] = mixed.r;
-      colors[i * 3 + 1] = mixed.g;
-      colors[i * 3 + 2] = mixed.b;
-    }
-    return colors;
-  }, []);
+  // Dynamic Coloring based on Position (X-axis split for Orange/Blue duality)
+  const colors = useMemo(() => new Float32Array(PARTICLE_COUNT * 3), []);
 
   useFrame((state) => {
     if (!pointsRef.current) return;
 
     const positions = pointsRef.current.geometry.attributes.position.array as Float32Array;
+    const colorAttr = pointsRef.current.geometry.attributes.color;
     const time = state.clock.getElapsedTime();
     
-    // Morphing speed
-    const lerpFactor = 0.03; 
+    const lerpFactor = 0.04; 
 
+    // Colors
+    const cOrange = new THREE.Color('#ff9900'); // Orange
+    const cGold = new THREE.Color('#ffcc00');   // Gold
+    const cBlue = new THREE.Color('#0088ff');   // Blue
+    const cCyan = new THREE.Color('#00ffff');   // Cyan
+    
     for (let i = 0; i < PARTICLE_COUNT; i++) {
       const ix = i * 3;
       const iy = i * 3 + 1;
       const iz = i * 3 + 2;
 
-      // 1. Interpolate towards target shape
+      // Interpolation
       positions[ix] += (targetPositions[ix] - positions[ix]) * lerpFactor;
       positions[iy] += (targetPositions[iy] - positions[iy]) * lerpFactor;
       positions[iz] += (targetPositions[iz] - positions[iz]) * lerpFactor;
 
-      // 2. Add subtle noise / "breathing" motion based on time
-      // This gives the "Quantum/Living" feel
-      const noiseAmp = 0.03;
-      positions[ix] += Math.sin(time * 2 + positions[iy] * 0.5) * noiseAmp;
-      positions[iy] += Math.cos(time * 1.5 + positions[iz] * 0.5) * noiseAmp;
-      positions[iz] += Math.sin(time * 2.2 + positions[ix] * 0.5) * noiseAmp;
+      // Noise / Breathing
+      const noiseAmp = 0.02;
+      positions[ix] += Math.sin(time * 3 + positions[iy] * 0.5) * noiseAmp;
+      positions[iy] += Math.cos(time * 2 + positions[iz] * 0.5) * noiseAmp;
+      positions[iz] += Math.sin(time * 2.5 + positions[ix] * 0.5) * noiseAmp;
+
+      // Update Colors based on current X position to match the "Dual Life" look
+      const xVal = positions[ix];
+      let col;
+      
+      // If x < 0 (Left side) -> Orange/Gold
+      // If x > 0 (Right side) -> Blue/Cyan
+      if (xVal < 0) {
+         const t = Math.min(1, Math.abs(xVal) / 10);
+         col = cOrange.clone().lerp(cGold, t + Math.sin(time + i)*0.2);
+      } else {
+         const t = Math.min(1, Math.abs(xVal) / 10);
+         col = cBlue.clone().lerp(cCyan, t + Math.cos(time + i)*0.2);
+      }
+      
+      // Add a bit of shimmer
+      col.multiplyScalar(1.0 + Math.sin(time * 5 + i) * 0.2);
+
+      colors[ix] = col.r;
+      colors[ix+1] = col.g;
+      colors[ix+2] = col.b;
     }
 
     pointsRef.current.geometry.attributes.position.needsUpdate = true;
+    colorAttr.needsUpdate = true;
     
-    // Slowly rotate the whole system
-    pointsRef.current.rotation.y = time * 0.05;
-    pointsRef.current.rotation.z = time * 0.02;
+    pointsRef.current.rotation.y = time * 0.1;
   });
 
   return (
@@ -85,15 +94,15 @@ const ParticleSystem: React.FC<ParticleSystemProps> = ({ shape }) => {
         <bufferAttribute
           attach="attributes-color"
           count={PARTICLE_COUNT}
-          array={colorAttribute}
+          array={colors}
           itemSize={3}
         />
       </bufferGeometry>
       <pointsMaterial
-        size={0.15}
+        size={0.12}
         vertexColors
         transparent
-        opacity={0.8}
+        opacity={0.9}
         blending={THREE.AdditiveBlending}
         sizeAttenuation={true}
         depthWrite={false}
